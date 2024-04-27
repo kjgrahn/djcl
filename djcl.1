@@ -1,0 +1,167 @@
+.ss 12 0
+.de BP
+.IP \\fB\\$*
+..
+.
+.TH djcl 1 "APR 2024" "DJCL" "User Manuals"
+.
+.SH "NAME"
+djcl \- execute a configured set of programs
+.
+.SH "SYNOPSIS"
+.B djcl
+.RB [ \-d ]
+.RB [ \-a
+.IR listen-address ]
+.B \-p
+.I port
+.B \-f
+.I config
+.br
+.B djcl
+.B --help
+.br
+.B djcl
+.B --version
+.
+.SH "DESCRIPTION"
+.
+.B djcl
+is a simple daemon which executes a set of programs specified in a config file,
+and logging their output to stdout and stderr.
+It also has a socket interface for starting these programs.
+.PP
+It's a way to maintain a fixed group of processes, except no attempt is made
+to restart those that exit; the user has to request a start.
+.PP
+Like in a normal shell, the child processes inherit most of the properties of
+.B djcl
+itself. The command-line arguments, environment and initial working
+directory are configurable according to below.
+Stdout and stderr are captured and printed to the
+.B djcl
+syslog or stdout, depending on whether it's running as a daemon or not.
+Programs terminating is also carefully logged.
+.PP
+TBD what happens when
+.B djcl
+exits.
+.
+.
+.SS "Configuration"
+.
+The configuration is line-oriented. Comments are lines starting with
+.BR # .
+Blank lines are ignored.
+Other lines are on the form
+.IR program . parameter " = " value :
+.
+.IP "\fIprogram\fB.exec\ =\ \fIcommand\ args\ ..."
+Running
+.I program
+means executing
+.IR command .
+The command line is split on whitespace, and there are no provisions for
+sending whitespace as arguments. No useful shell syntax is supported,
+unless you count searching the
+.B $PATH
+for
+.IR command .
+.
+.IP "\fIprogram\fB.arg\ =\ \fIvalue"
+Append a command-line argument. Use this if you prefer listing arguments
+one by one, on separate lines.
+.
+.IP "\fIprogram\fB.cwd\ =\ \fIpath"
+Run
+.I program
+in a particular directory.
+By default, the root directory is used.
+.
+.IP "\fIprogram.name\ \fB=\fP\ value"
+Add
+.B name=value
+to the environment.
+.
+.
+.SS "Socket interface"
+Line-oriented, with the following commands:
+.
+.IP "\fBstart \fIname"
+Start
+.IR name ,
+if it's not running already.
+.
+.IP "\fBlist"
+List configured programs and their status.
+.
+.IP "\fBdie"
+Tell
+.B djcl
+to terminate.
+.
+.IP "\fBexit"
+Close the socket.
+.
+.
+.SH "OPTIONS"
+.
+.IP "\fB\-d\fP, \fB--daemon\fP"
+Daemonize.
+.
+.IP "\fB\-a\fP, \fB--address\fP \fIlisten-address"
+The address to listen to.
+Default: listen on all interfaces.
+.\" Should be repeatable.
+.
+.IP "\fB\-p\fP, \fB--port\fP \fIport"
+The port to listen to, instead of port 80
+.RB ( http ).
+.
+.IP "\fB\-f\fP \fIconfig"
+The configuration file.
+.\" Should be repeatable.
+.
+.
+.SH "EXAMPLES"
+.IP
+.ft CW
+.nf
+# Similar to my ~/.Xclients
+
+xterm.exec  = xterm
+xterm.arg   = +sb
+xterm.arg   = -geometry
+xterm.arg   = 80x90-0-0
+
+xclock.exec = xclock -fg cyan -bg darkblue -d -brief -geometry 60x52+0+0
+xload.exec  = xload  -fg cyan -bg darkblue -hl red -geometry 180x52+62+0
+pulse.exec  = pavucontrol
+.fi
+.
+.
+.SH "BUGS"
+.
+.IP \- 3x
+The socket interface should be a Unix domain socket.
+.IP \-
+There's no support for re-reading the configuration.
+.PP
+The whole functionality is a bit pointless, or it would have been a standard
+Unix feature already, like
+.BR cron (8)
+and
+.BR atd (8).
+.
+.
+.SH "SEE ALSO"
+.
+.BR systemd.exec (5).
+.
+.
+.SH "AUTHOR"
+J\(:orgen Grahn \[fo]grahn@snipabacken.se\[fc].
+.
+.
+.SH "LICENSE"
+The GNU General Public License (GPL) version 2 or (at your option) version 3.
