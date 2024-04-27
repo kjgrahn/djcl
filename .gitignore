@@ -1,0 +1,11 @@
+allergyd
+allergy_cat
+allergy_grep
+*.[oa]
+*.ps
+*.pdf
+test.cc
+tests
+TAGS
+dep/
+gmon.out
