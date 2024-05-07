@@ -6,7 +6,7 @@
 
 SHELL=/bin/bash
 INSTALLBASE=/usr/local
-CXXFLAGS=-Wall -Wextra -pedantic -std=c++14 -g -Os -Wold-style-cast
+CXXFLAGS=-Wall -Wextra -pedantic -std=c++17 -g -Os -Wold-style-cast
 CPPFLAGS=
 ARFLAGS=rTP
 
@@ -25,13 +25,12 @@ check: tests
 checkv: tests
 	valgrind -q ./tests -v
 
-libjcl.a: times.o
-libjcl.a: timepoint.o
-libjcl.a: session.o
-libjcl.a: sessionhistory.o
-libjcl.a: backlog.o
-libjcl.a: join.o
 libjcl.a: split.o
+libjcl.a: timepoint.o
+libjcl.a: log.o
+libjcl.a: parent.o
+libjcl.a: schedule.o
+libjcl.a: textread.o
 	$(AR) $(ARFLAGS) $@ $^
 
 djcl: djcl.o libjcl.a
@@ -39,7 +38,6 @@ djcl: djcl.o libjcl.a
 
 libtest.a: test/log.o
 libtest.a: test/stealfd.o
-libtest.a: test/join.o
 libtest.a: test/split.o
 	$(AR) $(ARFLAGS) $@ $^
 
