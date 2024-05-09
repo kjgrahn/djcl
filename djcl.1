@@ -3,7 +3,7 @@
 .IP \\fB\\$*
 ..
 .
-.TH djcl 1 "APR 2024" "DJCL" "User Manuals"
+.TH djcl 1 "MAY 2024" "DJCL" "User Manuals"
 .
 .SH "NAME"
 djcl \- execute a configured set of programs
@@ -28,7 +28,7 @@ djcl \- execute a configured set of programs
 .
 .B djcl
 is a simple daemon which executes a set of programs specified in a config file,
-and logging their output to stdout and stderr.
+and logs their output (their stdout and stderr).
 It also has a socket interface for starting these programs.
 .PP
 It's a way to maintain a fixed group of processes, except no attempt is made
@@ -51,6 +51,8 @@ exits.
 .SS "Configuration"
 .
 The configuration is line-oriented. Comments are lines starting with
+.BR # ,
+or the end of a line after a
 .BR # .
 Blank lines are ignored.
 Other lines are on the form
@@ -85,7 +87,7 @@ to the environment.
 .
 .
 .SS "Socket interface"
-Line-oriented, with the following commands:
+A TCP socket, line-oriented, with the following commands:
 .
 .IP "\fBstart \fIname"
 Start
@@ -124,8 +126,10 @@ The configuration file.
 .
 .
 .SH "EXAMPLES"
-.IP
+.IP "" 3x
 .ft CW
+.ps -2
+.vs -2
 .nf
 # Similar to my ~/.Xclients
 
@@ -161,6 +165,9 @@ and
 .
 .SH "AUTHOR"
 J\(:orgen Grahn \[fo]grahn@snipabacken.se\[fc].
+.PP
+The program is a rough clone of another program, by different authors.
+.\" Including Jos.
 .
 .
 .SH "LICENSE"
