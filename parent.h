@@ -6,11 +6,10 @@
 #define DJCL_PARENT_H
 
 #include "schedule.h"
+#include "pid.h"
 #include "log.h"
 
 #include <map>
-
-using Pid = unsigned;
 
 /**
  * The thing which forks and keeps track of forked processes.
