@@ -20,11 +20,13 @@
 #include <fcntl.h>
 #include <pwd.h>
 
-#include "version.h"
 #include "error.h"
-#include "server.h"
 #include "timepoint.h"
 
+#include "schedule.h"
+#include "parent.h"
+#include "sigpipe.h"
+#include "spider.h"
 #include "log.h"
 
 
@@ -45,52 +47,12 @@ namespace {
 	return !err;
     }
 
-    bool nonblock(int fd)
-    {
-	int n = fcntl(fd, F_GETFL, 0);
-	if(n<0) return false;
-	return fcntl(fd, F_SETFL, n | O_NONBLOCK) >= 0;
-    }
-
     void ignore_sigpipe()
     {
 	static struct sigaction ignore;
 	ignore.sa_handler = SIG_IGN;
 	ignore.sa_flags = SA_RESTART;
 	(void)sigaction(SIGPIPE, &ignore, 0);
-    }
-
-    struct {
-	bool sighup = false;
-    } g;
-
-    void sighup(int) { g.sighup = true; }
-
-    void handle_sighup()
-    {
-	static struct sigaction sa;
-	sa.sa_handler = sighup;
-	sa.sa_flags = 0;
-	(void)sigaction(SIGHUP, &sa, 0);
-    }
-
-    /* Change effective user, or complain and return false.
-     */
-    bool change_user(std::ostream& err,
-		     const std::string& name)
-    {
-	const auto* e = getpwnam(name.c_str());
-	if (!e) {
-	    err << "error: user " << name << " not found\n";
-	    return false;
-	}
-	const uid_t uid = e->pw_uid;
-	if (seteuid(uid)) {
-	    err << "error: seteuid(" << name << ") failed: "
-		<< strerror(errno) << '\n';
-	    return false;
-	}
-	return true;
     }
 
     /* Create a listening socket on host:port (the wildcard address if
@@ -125,7 +87,9 @@ namespace {
 	for(rp = result; rp; rp = rp->ai_next) {
 	    const addrinfo& r = *rp;
 
-	    fd = socket(r.ai_family, r.ai_socktype, r.ai_protocol);
+	    fd = socket(r.ai_family,
+			r.ai_socktype | SOCK_CLOEXEC,
+			r.ai_protocol);
 	    if(fd == -1) continue;
 
 	    if(reuse_addr(fd)
@@ -146,71 +110,19 @@ namespace {
 	return fd;
     }
 
+    namespace sigchld {
 
-    /**
-     * The main event loop.
-     */
-    bool loop(const Content& content, const int lfd)
+	Sigpipe pipe;
+
+	void handler(int) { pipe.set(); }
+    }
+
+    void catch_sigchld()
     {
-	Server server(content, std::chrono::seconds {20});
-	server.add(lfd);
-	Periodic audit(now(), std::chrono::seconds{20});
-
-	while(1) {
-	    server.wait();
-	    const Timepoint ts = now();
-
-	    if (g.sighup) {
-		Info(Syslog::log) << "SIGHUP; restarting server";
-		g.sighup = false;
-		return true;
-	    }
-
-	    for (Server::iterator i = server.lbegin(); i!=server.lend(); i++) {
-		const Server::Event& ev = *i;
-		if (ev.revents==0) continue;
-
-		struct sockaddr_storage sa;
-		socklen_t slen = sizeof sa;
-		int fd = accept(ev.fd,
-				reinterpret_cast<sockaddr*>(&sa), &slen);
-		if(fd!=-1) {
-		    nonblock(fd);
-		    server.add(fd, sa, ts);
-		}
-	    }
-
-	    for (Server::Event& ev : server) {
-		if (ev.revents==0) continue;
-
-		Session& session = server.session(ev);
-		const int fd = ev.fd;
-		Session::State state = Session::DIE;
-
-		try {
-		    if (writable(ev)) {
-			state = session.write(fd, ts);
-		    }
-		    else if (readable(ev)) {
-			state = session.read(fd, ts);
-		    }
-		}
-		catch(const SessionError& e) {
-		    Info(Syslog::log) << session << " aborted: " << e;
-		}
-
-		if(state==Session::DIE) {
-		    server.remove(ev);
-		}
-		else {
-		    server.ctl(ev, state);
-		}
-	    }
-
-	    if(audit.check(ts)) {
-		server.reconsider(ts);
-	    }
-	}
+	struct sigaction sa = {};
+	sa.sa_handler = sigchld::handler;
+	sa.sa_flags = SA_NOCLDSTOP | SA_RESTART;
+	(void)sigaction(SIGCHLD, &sa, nullptr);
     }
 }
 
@@ -259,7 +171,7 @@ int main(int argc, char ** argv)
 	    std::cout << usage << '\n';
 	    return 0;
 	case 'v':
-	    std::cout << "djcl " << version() << '\n'
+	    std::cout << "djcl 1.0\n"
 		      << "Copyright (c) 2024 Jörgen Grahn\n";
 	    return 0;
 	    break;
@@ -273,28 +185,27 @@ int main(int argc, char ** argv)
 	}
     }
 
-    std::vector<std::string> files {argv+optind, argv+argc};
+    const std::vector<std::string> remaining {argv+optind, argv+argc};
 
-    if(hosts.empty() || root.empty() || files.empty()) {
+    if (config.empty() || remaining.size()) {
 	    std::cerr << usage << '\n';
 	    return 1;
     }
 
-    Files indices {begin(files), end(files), false};
-    allergy::Index index {std::cerr, indices};
-    if (!index.valid()) return 1;
-
-    const Content content(std::cerr, hosts, index, root);
-    if (!content.valid()) return 1;
+    const Schedule schedule {std::cerr, config};
+    if (!schedule.valid()) return 1;
 
     const int lfd = listening_socket(std::cerr, addr, port);
     if (lfd==-1) return 1;
 
+    Syslog& log = Syslog::log;
+
     if (addr.empty()) addr = "*";
-    Info(Syslog::log) << "listening on " << addr << ':' << port;
+    Info(log) << "listening on " << addr << ':' << port;
 
     ignore_sigpipe();
-    handle_sighup();
+
+    catch_sigchld();
 
     if(daemonize) {
 	int err = daemon(0, 0);
@@ -303,21 +214,20 @@ int main(int argc, char ** argv)
 		      << strerror(errno) << '\n';
 	    return 1;
 	}
-	Syslog::log.activate();
+	log.activate();
     }
 
-    while (loop(content, lfd)) {
-	/* reestablish the server with a new Index.
-	 */
-	Files indices {begin(files), end(files), false};
-	std::stringstream ss;
-	index = {ss, indices};
+    Spider spider;
 
-	std::string s;
-	while (std::getline(ss, s)) {
-	    Info(Syslog::log) << s;
-	}
-    }
+    auto outf = [&] (auto fd, auto f) { spider.read(fd, f); };
+    Parent parent {schedule, log, outf};
 
+    spider.read(sigchld::pipe.readfd(),
+		[&] (int) {
+		    sigchld::pipe.drain();
+		    parent.wait();
+		});
+
+    spider.loop();
     return 0;
 }
