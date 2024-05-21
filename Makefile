@@ -30,6 +30,8 @@ libjcl.a: timepoint.o
 libjcl.a: log.o
 libjcl.a: parent.o
 libjcl.a: schedule.o
+libjcl.a: sigpipe.o
+libjcl.a: pipes.o
 libjcl.a: spider.o
 libjcl.a: textread.o
 libjcl.a: sigpipe.o
