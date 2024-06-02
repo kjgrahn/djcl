@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, 2012 Jörgen Grahn
+ * Copyright (c) 2010, 2012, 2024 Jörgen Grahn
  * All rights reserved.
  *
  */
@@ -8,8 +8,7 @@
 #include <algorithm>
 #include <cstring>
 
-#include <sys/types.h>
-#include <sys/socket.h>
+#include <unistd.h>
 #include <errno.h>
 
 
@@ -60,7 +59,7 @@ void TextReader::feed(int fd)
     b_ -= (a_-p_);
     a_ = p_;
 
-    const ssize_t n = recv(fd, b_, q_-b_, 0);
+    const ssize_t n = ::read(fd, b_, q_-b_);
     if(n==-1) {
 	switch(errno) {
 	case EAGAIN:
