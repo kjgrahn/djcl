@@ -33,6 +33,7 @@ libjcl.a: schedule.o
 libjcl.a: sigpipe.o
 libjcl.a: pipes.o
 libjcl.a: spider.o
+libjcl.a: server.o
 libjcl.a: textread.o
 libjcl.a: sigpipe.o
 	$(AR) $(ARFLAGS) $@ $^
