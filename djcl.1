@@ -3,7 +3,7 @@
 .IP \\fB\\$*
 ..
 .
-.TH djcl 1 "MAY 2024" "DJCL" "User Manuals"
+.TH djcl 1 "JUN 2024" "DJCL" "User Manuals"
 .
 .SH "NAME"
 djcl \- execute a configured set of programs
@@ -97,6 +97,9 @@ if it's not running already.
 .IP "\fBlist"
 List configured programs and their status.
 .
+.IP "\fBhelp"
+Show a brief usage message.
+.
 .IP "\fBdie"
 Tell
 .B djcl
@@ -112,13 +115,12 @@ Close the socket.
 Daemonize.
 .
 .IP "\fB\-a\fP, \fB--address\fP \fIlisten-address"
-The address to listen to.
+The address or host to listen to.
 Default: listen on all interfaces.
 .\" Should be repeatable.
 .
 .IP "\fB\-p\fP, \fB--port\fP \fIport"
-The port to listen to, instead of port 80
-.RB ( http ).
+The port or service name to listen to.
 .
 .IP "\fB\-f\fP \fIconfig"
 The configuration file.
