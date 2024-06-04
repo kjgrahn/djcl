@@ -4,7 +4,7 @@
 #include <sys/epoll.h>
 
 Spider::Spider()
-    : epfd(epoll_create(10))
+    : epfd(epoll_create1(EPOLL_CLOEXEC))
 {}
 
 /* During loop(), monitor 'fd' for readability and call f(fd).
