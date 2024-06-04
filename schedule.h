@@ -39,4 +39,6 @@ private:
     bool fail = true;
 };
 
+const Command* find(const Schedule& schedule, const Name& name);
+
 #endif

@@ -14,14 +14,14 @@
  */
 class Pid {
 public:
+    Pid() : val{-1} {}
     Pid(pid_t val) : val{val} {}
 
     bool operator< (const Pid& other) const { return val < other.val; }
     explicit operator bool () const { return val != -1; }
 
-    std::ostream& put(std::ostream& os) const { return os << val; }
+    std::ostream& put(std::ostream& os) const { return os << '[' << val << ']'; }
 
-private:
     pid_t val;
 };
 

@@ -134,3 +134,11 @@ Schedule::Schedule(std::ostream& err, const std::string& file)
 
     fail = v.empty() || invalid(v);
 }
+
+const Command* find(const Schedule& schedule, const Name& name)
+{
+    for (auto& cmd : schedule) {
+	if (cmd.name==name) return &cmd;
+    }
+    return nullptr;
+}

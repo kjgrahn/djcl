@@ -27,6 +27,7 @@
 #include "parent.h"
 #include "sigpipe.h"
 #include "spider.h"
+#include "server.h"
 #include "log.h"
 
 
@@ -187,7 +188,7 @@ int main(int argc, char ** argv)
 
     const std::vector<std::string> remaining {argv+optind, argv+argc};
 
-    if (config.empty() || remaining.size()) {
+    if (config.empty() || remaining.size() || port.empty()) {
 	    std::cerr << usage << '\n';
 	    return 1;
     }
@@ -226,6 +227,13 @@ int main(int argc, char ** argv)
 		[&] (int) {
 		    sigchld::pipe.drain();
 		    parent.wait();
+		});
+
+    Server server {log, spider, parent};
+
+    spider.read(lfd,
+		[&] (int lfd) {
+		    server.connect(lfd);
 		});
 
     spider.loop();

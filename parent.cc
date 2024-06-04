@@ -8,6 +8,7 @@
 #include <signal.h>
 
 #include <cstring>
+#include <cstdio>
 #include <iostream>
 
 namespace {
@@ -46,9 +47,6 @@ namespace {
 	    next(p);
 	}
     }
-}
-
-namespace {
 
     Pid spawn(Syslog& log, Command cmd, Pipe& stdout, Pipe& stderr)
     {
@@ -59,6 +57,8 @@ namespace {
 	}
 
 	if (pid) {
+	    Info{log} << "started " << cmd.name << ' ' << Pid{pid};
+
 	    stdout.parent();
 	    stderr.parent();
 	    return pid;
@@ -133,7 +133,8 @@ Parent::Parent(const Schedule& schedule,
 	       Syslog& log,
 	       std::function<void(int, std::function<void(int)>)> reg)
     : schedule {schedule},
-      log {log}
+      log {log},
+      reg {reg}
 {
     for (const Command& cmd : schedule) {
 	auto stdout = std::make_unique<Pipe>();
@@ -163,6 +164,83 @@ Parent::Stream::Stream(const Name& pname, const char* sname, std::unique_ptr<Pip
       pipe {std::move(pipe)},
       text {"\n"}
 {}
+
+// void shutdown();
+
+namespace {
+
+    template <class Map>
+    typename Map::key_type key_of(const Map& map,
+				  const typename Map::mapped_type& val)
+    {
+	for (auto& e : map) {
+	    if (e.second==val) return e.first;
+	}
+	return {};
+    }
+}
+
+/**
+ * Start 'name', if it isn't running already.
+ */
+void Parent::start(const Name& name)
+{
+    auto pid = key_of(state, name);
+    if (pid) {
+	Warning{log} << "cannot start " << name << ": it appears to be running already " << pid;
+	return;
+    }
+
+    const auto* const cmd = find(schedule, name);
+    if (!cmd) {
+	Err{log} << "cannot start " << name << ": not configured";
+	return;
+    }
+
+    auto stdout = std::make_unique<Pipe>();
+    auto stderr = std::make_unique<Pipe>();
+    pid = spawn(log, *cmd, *stdout, *stderr);
+
+    if (pid) {
+	assign(state, pid, cmd->name);
+	const int fdout = stdout->fd();
+	const int fderr = stderr->fd();
+
+	ss.erase(fdout);
+	ss.erase(fderr);
+
+	ss.emplace(fdout, Stream {cmd->name, "stdout", std::move(stdout)});
+	ss.emplace(fderr, Stream {cmd->name, "stderr", std::move(stderr)});
+
+	reg(fdout, [&] (int fd) { read(fd); });
+	reg(fderr, [&] (int fd) { read(fd); });
+    }
+}
+
+/**
+ * List the schedule, and the pid for each running program.
+ */
+std::vector<std::string> Parent::list() const
+{
+    auto str = [] (const Pid& pid) -> std::string {
+	char buf[8];
+	if (pid) {
+	    std::snprintf(buf, sizeof buf, "%6u", unsigned(pid.val));
+	}
+	else {
+	    std::snprintf(buf, sizeof buf, "%6s", "-");
+	}
+	return buf;
+    };
+
+    std::vector<std::string> acc;
+
+    for (auto& cmd : schedule) {
+	const auto pid = str(key_of(state, cmd.name));
+	acc.emplace_back(pid + "  " + cmd.name);
+    }
+    return acc;
+}
 
 /**
  * Reap any children which have terminated. The name is a bit

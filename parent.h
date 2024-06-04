@@ -27,12 +27,15 @@ public:
 
     void shutdown();
     void start(const Name&);
+    std::vector<std::string> list() const;
+
     void wait();
     void read(int fd);
 
 private:
     const Schedule& schedule;
     Syslog& log;
+    const std::function<void(int, std::function<void(int)>)> reg;
 
     std::map<Pid, Name> state;
 
