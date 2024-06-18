@@ -1,0 +1,41 @@
+Quoting parts of the man page:
+
+NAME
+       djcl - execute a configured set of programs
+
+SYNOPSIS
+       djcl [-d] [-a listen-address] -p port -f config
+       djcl --help
+       djcl --version
+
+DESCRIPTION
+       djcl  is  a simple daemon which executes a set of programs speci-
+       fied in a config file, and logs their output  (their  stdout  and
+       stderr).  It  also has a socket interface for starting these pro-
+       grams.
+
+       It's a way to maintain a fixed group of processes, except no  at-
+       tempt is made to restart those that exit; the user has to request
+       a start.
+
+       Like in a normal shell, the child processes inherit most  of  the
+       properties  of  djcl itself. The command-line arguments, environ-
+       ment and initial working directory are configurable according  to
+       below.  Stdout  and  stderr  are captured and printed to the djcl
+       syslog or stdout, depending on whether it's running as  a  daemon
+       or not. A program terminating is also carefully logged.
+
+SEE ALSO
+       systemd.exec(5).
+
+AUTHOR
+       Jorgen Grahn <grahn@snipabacken.se>.
+
+       The program is a rough clone of another program, by different au-
+       thors.
+
+LICENSE
+       The  GNU  General  Public License (GPL) version 2 or (at your op-
+       tion) version 3.
+
+DJCL                            JUN 2024                         djcl(1)
