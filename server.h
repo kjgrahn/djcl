@@ -31,7 +31,7 @@ private:
     Spider& spider;
     Parent& parent;
 
-    std::string exec(const std::string& s);
+    bool exec(std::ostream& os, const std::string& s);
 
     struct Client {
 	explicit Client(const sockaddr_storage& sa);

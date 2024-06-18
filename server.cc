@@ -1,11 +1,15 @@
 #include "server.h"
 
 #include "split.h"
+#include "error.h"
 
 #include <sys/uio.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <cstring>
+#include <sstream>
+
+struct SocketBlockError : public FatalError {};
 
 namespace {
 
@@ -37,17 +41,19 @@ namespace {
 	return fd;
     }
 
-    /* Write a CRLF-terminated text to 'fd'.
-     *
-     * Should handle short writes, but doesn't -- we cheat and assume
-     * such things don't happen on these low-bandwidth channels.
+    /* Write the contents of 'oss', ended with CRLF, to fd. Then empty
+     * the stream so it can be reused. Throw a fatal error if the
+     * write doesn't complete - we have no support for buffering while
+     * sockets are blocked, and so on; it wouldn't be worth it.
      */
-    void writeln(int fd, const std::string& s)
+    void drain(int fd, std::ostringstream& oss)
     {
-	std::array<iovec, 2> v;
-	v[0] = {const_cast<char*>(&s[0]), s.size()};
-	v[1] = {const_cast<char*>(crlf), 2};
-	(void)writev(fd, v.data(), v.size());
+	oss << crlf;
+	auto s = oss.str();
+	oss.str("");
+	ssize_t n = write(fd, s.data(), s.size());
+	size_t len = n;
+	if (n==-1 || len != s.size()) throw SocketBlockError {};
     }
 }
 
@@ -66,7 +72,9 @@ void Server::connect(int lfd)
     int fd = accept(lfd, sa);
     Info{log} << "new connection from " << sa;
 
-    writeln(fd, "Hello. This is djcl; please type commands.");
+    std::ostringstream greeting;
+    greeting << "ok Hello. This is djcl; please type commands.";
+    drain(fd, greeting);
 
     ss.erase(fd);
     ss.emplace(fd, Client{sa});
@@ -85,6 +93,9 @@ Server::Client::Client(const sockaddr_storage& sa)
  */
 void Server::read(int fd)
 {
+    bool close = false;
+    std::ostringstream resp;
+
     const auto it = ss.find(fd);
     if (it==end(ss)) return;
     Client& client = it->second;
@@ -94,8 +105,8 @@ void Server::read(int fd)
     char* a; char* b;
     while (client.text.read(a, b)) {
 	std::string s {a, b};
-	auto rc = exec(s);
-	if (rc.size()) writeln(fd, rc);
+	if (!exec(resp, s)) close = true;
+	drain(fd, resp);
     }
 
     if (client.text.eof()) {
@@ -103,29 +114,73 @@ void Server::read(int fd)
 	ss.erase(it);
 	::close(fd);
     }
+    else if (close) {
+	Info{log} << "" << client.sa << ": closing connection";
+	ss.erase(it);
+	::close(fd);
+    }
 }
 
 /**
  * Execute a single textual command, which is a line of text.
- * If a string is returned, it's echoed to the client.
+ *
+ * Writes a textual response to 'os', but doesn't line-terminate it.
+ * Returns false if the connection should close.
  */
-std::string Server::exec(const std::string& s)
+bool Server::exec(std::ostream& os, const std::string& s)
 {
     const auto v = split(s, 2);
-    if (v.empty()) return "";
-    const auto& cmd = v[0];
-    if (cmd=="start" && v.size()==2) {
-	parent.start(v[1]);
-	return "ok";
-    }
-    else if (cmd=="list") {
-	const auto pp = parent.list();
-	return join(crlf, pp);
-    }
-    else if (cmd=="die") {
-    }
-    else if (cmd=="exit") {
+    if (v.empty()) {
+	os << "ok";
+	return true;
     }
 
-    return "usage: start <program> | help | list | die | exit";
+    const auto& cmd = v[0];
+    if (cmd=="start") {
+	if (v.size() > 1) {
+	    parent.start(os, v[1]);
+	}
+	else {
+	    parent.start_all(os);
+	}
+	return true;
+    }
+
+    if (cmd=="stop") {
+	if (v.size() > 1) {
+	    parent.stop(os, v[1]);
+	}
+	else {
+	    parent.stop_all(os);
+	}
+	return true;
+    }
+
+    if (cmd=="list") {
+	parent.list(os);
+	os << "ok";
+	return true;
+    }
+
+    if (cmd=="die") {
+	spider.stop();
+	os << "ok djcl exiting";
+	return true;
+    }
+
+    if (cmd=="exit") {
+	os << "ok closing connection";
+	return false;
+    }
+
+    const auto rc = cmd=="help" ? "ok" : "error";
+
+    os << rc << " usage:\n"
+		"   start [name]\n"
+		"   stop  [name]\n"
+		"   list\n"
+		"   help\n"
+		"   die\n"
+		"   exit";
+    return true;
 }

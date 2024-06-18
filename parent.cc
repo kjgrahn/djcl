@@ -137,24 +137,7 @@ Parent::Parent(const Schedule& schedule,
       reg {reg}
 {
     for (const Command& cmd : schedule) {
-	auto stdout = std::make_unique<Pipe>();
-	auto stderr = std::make_unique<Pipe>();
-	Pid pid = spawn(log, cmd, *stdout, *stderr);
-
-	if (pid) {
-	    assign(state, pid, cmd.name);
-	    const int fdout = stdout->fd();
-	    const int fderr = stderr->fd();
-
-	    ss.erase(fdout);
-	    ss.erase(fderr);
-
-	    ss.emplace(fdout, Stream {cmd.name, "stdout", std::move(stdout)});
-	    ss.emplace(fderr, Stream {cmd.name, "stderr", std::move(stderr)});
-
-	    reg(fdout, [&] (int fd) { read(fd); });
-	    reg(fderr, [&] (int fd) { read(fd); });
-	}
+	start(cmd);
     }
 }
 
@@ -181,46 +164,123 @@ namespace {
 }
 
 /**
+ * Helper.
+ */
+Pid Parent::start(const Command& cmd)
+{
+    auto stdout = std::make_unique<Pipe>();
+    auto stderr = std::make_unique<Pipe>();
+    const Pid pid = spawn(log, cmd, *stdout, *stderr);
+
+    if (!pid) {
+	return pid;
+    }
+
+    assign(state, pid, cmd.name);
+    const int fdout = stdout->fd();
+    const int fderr = stderr->fd();
+
+    ss.erase(fdout);
+    ss.erase(fderr);
+
+    ss.emplace(fdout, Stream {cmd.name, "stdout", std::move(stdout)});
+    ss.emplace(fderr, Stream {cmd.name, "stderr", std::move(stderr)});
+
+    reg(fdout, [&] (int fd) { read(fd); });
+    reg(fderr, [&] (int fd) { read(fd); });
+
+    return pid;
+}
+
+/**
  * Start 'name', if it isn't running already.
  */
-void Parent::start(const Name& name)
+void Parent::start(std::ostream& os, const Name& name)
 {
     auto pid = key_of(state, name);
     if (pid) {
 	Warning{log} << "cannot start " << name << ": it appears to be running already " << pid;
+	os << "error: " << name << " already running";
 	return;
     }
 
     const auto* const cmd = find(schedule, name);
     if (!cmd) {
 	Err{log} << "cannot start " << name << ": not configured";
+	os << "error: " << name << " not configured";
 	return;
     }
 
-    auto stdout = std::make_unique<Pipe>();
-    auto stderr = std::make_unique<Pipe>();
-    pid = spawn(log, *cmd, *stdout, *stderr);
-
-    if (pid) {
-	assign(state, pid, cmd->name);
-	const int fdout = stdout->fd();
-	const int fderr = stderr->fd();
-
-	ss.erase(fdout);
-	ss.erase(fderr);
-
-	ss.emplace(fdout, Stream {cmd->name, "stdout", std::move(stdout)});
-	ss.emplace(fderr, Stream {cmd->name, "stderr", std::move(stderr)});
-
-	reg(fdout, [&] (int fd) { read(fd); });
-	reg(fderr, [&] (int fd) { read(fd); });
+    if (!start(*cmd)) {
+	os << "error: " << name << " failed to start";
+	return;
     }
+
+    os << "ok";
+}
+
+/**
+ * Start everything scheduled.
+ */
+void Parent::start_all(std::ostream& os)
+{
+    unsigned n = 0;
+
+    for (const Command& cmd : schedule) {
+
+	if (key_of(state, cmd.name)) continue;
+	if (start(cmd)) n++;
+    }
+
+    os << "ok started " << n << " programs";
+}
+
+void Parent::stop(std::ostream& os, const Name& name) const
+{
+    if (!find(schedule, name)) {
+	os << "error " << name << ": not configured";
+	return;
+    }
+
+    const auto pid = key_of(state, name);
+    if (!pid) {
+	os << "error cannot stop " << name << ": it is not running";
+	return;
+    }
+
+    Info{log} << "sending SIGINT to " << name << ' ' << pid;
+
+    if (kill(pid.val, SIGINT) == -1) {
+	os << "error cannot kill " << name << ": " << std::strerror(errno);
+	return;
+    }
+
+    os << "ok";
+}
+
+void Parent::stop_all(std::ostream& os) const
+{
+    for (const auto& e : state) {
+
+	const Pid& pid = e.first;
+	const Name& name = e.second;
+
+	Info{log} << "sending SIGINT to " << name << ' ' << pid;
+
+	if (kill(pid.val, SIGINT) == -1) {
+	    os << "error cannot kill " << name << ' ' << pid
+	       << ": " << std::strerror(errno);
+	    return;
+	}
+    }
+
+    os << "ok";
 }
 
 /**
  * List the schedule, and the pid for each running program.
  */
-std::vector<std::string> Parent::list() const
+void Parent::list(std::ostream& os) const
 {
     auto str = [] (const Pid& pid) -> std::string {
 	char buf[8];
@@ -233,13 +293,9 @@ std::vector<std::string> Parent::list() const
 	return buf;
     };
 
-    std::vector<std::string> acc;
-
     for (auto& cmd : schedule) {
-	const auto pid = str(key_of(state, cmd.name));
-	acc.emplace_back(pid + "  " + cmd.name);
+	os << str(key_of(state, cmd.name)) << "  " << cmd.name << "\r\n";
     }
-    return acc;
 }
 
 /**
@@ -259,7 +315,7 @@ void Parent::wait()
 	if (it != end(state)) {
 	    const Name name = it->second;
 	    state.erase(it);
-	    Info{log} << pid << ' ' << name << ": " << info;
+	    Info{log} << name << ' ' << pid<< ": " << info;
 	}
 	else {
 	    /* Not sure why we'd be notified about a process

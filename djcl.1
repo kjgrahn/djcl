@@ -1,4 +1,6 @@
 .ss 12 0
+.hw stdout stderr
+.
 .de BP
 .IP \\fB\\$*
 ..
@@ -41,18 +43,19 @@ directory are configurable according to below.
 Stdout and stderr are captured and printed to the
 .B djcl
 syslog or stdout, depending on whether it's running as a daemon or not.
-Programs terminating is also carefully logged.
+A program terminating is also carefully logged.
 .PP
-TBD what happens when
+When
 .B djcl
-exits.
+exits, it doesn't attempt to kill the programs \-
+although most will exit anyway, since their stdout/stderr disappear.
 .
 .
 .SS "Configuration"
 .
 The configuration is line-oriented. Comments are lines starting with
 .BR # ,
-or the end of a line after a
+or the rest of a line after a
 .BR # .
 Blank lines are ignored.
 Other lines are on the form
@@ -87,12 +90,26 @@ to the environment.
 .
 .
 .SS "Socket interface"
-A TCP socket, line-oriented, with the following commands:
+A TCP socket, line-oriented text, with the following commands:
+.
+.IP "\fBstart" 12x
+Start all configured programs, unless they're running already.
 .
 .IP "\fBstart \fIname"
 Start
 .IR name ,
 if it's not running already.
+.
+.IP "\fBstop"
+Send
+.B SIGINT
+to all running programs (and hope they honor it).
+.
+.IP "\fBstop \fIname"
+Send
+.B SIGINT
+to
+.IR name .
 .
 .IP "\fBlist"
 List configured programs and their status.
@@ -108,6 +125,15 @@ to terminate.
 .IP "\fBexit"
 Close the socket.
 .
+.PP
+The response format is a bit loose, but it starts with the
+words
+.B ok
+or
+.BR error .
+There's an initial greeting; it starts with
+.BR ok .
+.
 .
 .SH "OPTIONS"
 .
@@ -115,7 +141,7 @@ Close the socket.
 Daemonize.
 .
 .IP "\fB\-a\fP, \fB--address\fP \fIlisten-address"
-The address or host to listen to.
+The address or host to listen to, for the socket interface.
 Default: listen on all interfaces.
 .\" Should be repeatable.
 .

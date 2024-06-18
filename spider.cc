@@ -3,6 +3,7 @@
 #include <array>
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <errno.h>
 
 Spider::Spider()
     : epfd(epoll_create1(EPOLL_CLOEXEC))

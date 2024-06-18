@@ -26,8 +26,13 @@ public:
 	   std::function<void(int, std::function<void(int)>)> outf);
 
     void shutdown();
-    void start(const Name&);
-    std::vector<std::string> list() const;
+
+    void start(std::ostream& os, const Name&);
+    void start_all(std::ostream& os);
+    void stop(std::ostream& os, const Name&) const;
+    void stop_all(std::ostream& os) const;
+
+    void list(std::ostream& os) const;
 
     void wait();
     void read(int fd);
@@ -51,6 +56,8 @@ private:
     };
 
     std::map<int, Stream> ss;
+
+    Pid start(const Command&);
 };
 
 #endif
