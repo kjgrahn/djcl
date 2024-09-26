@@ -16,7 +16,7 @@
  *
  * The design might not be generally useful. There seems to be no
  * consensus on how to do this kind of thing, and I haven't been
- * comfortable using any of the ones I have used.
+ * comfortable with any of the ones I have used.
  */
 class Spider {
 public:
